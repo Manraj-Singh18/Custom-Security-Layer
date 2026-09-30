@@ -16,7 +16,8 @@ int main(){
     int sockfd;
     struct sockaddr_in dest_addr;
     const char* cp = DEST_IP;
-
+    int bytes_sent;
+    
 
     sockfd = socket(AF_INET,SOCK_STREAM,0);
     if(sockfd<0){
@@ -50,6 +51,24 @@ int main(){
     }
     else{
         perror("recv failed!");
+    }
+
+    char* message = NULL;
+    size_t  len =0;
+    while(1){
+        int read = getline(&message,&len,stdin);
+        message[read-1] ='\0';
+        read--;
+        if(read<0){
+            printf("failed to parse your message, Try again!\n");
+            continue;
+        }
+        bytes_sent = send(sockfd, message, read, 0);
+        if (bytes_sent < 0) {
+            perror("Send failed");
+            break;
+        }
+
     }
 
 

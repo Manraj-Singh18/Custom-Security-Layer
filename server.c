@@ -45,10 +45,26 @@ int main(){
     }
     char* user = inet_ntoa(client_addr.sin_addr);
     char welcome[50];
-    sprintf(welcome, "Welcome user %s", user);
+    sprintf(welcome, "Hello user %s", user);
     int len, bytes_sent;
     len = strlen(welcome);
     bytes_sent = send(fd, welcome, len, 0);
+    while(1){
+        char buf[50];
+    ssize_t n = recv(fd, buf,sizeof(buf)-1,0);
+    if(n>0){
+        buf[n] = '\0';
+        printf("%s\n",buf);
+    }
+    else if(n==0){
+        printf("Client closed connection\n");
+        break;
+    }
+    else{
+        perror("recv failed!");
+        break;
+    }
+    }
     close(fd);
     close(sockfd);
    return 0;
