@@ -10,6 +10,27 @@
 #define DEST_IP "127.0.0.1"
 #define DEST_PORT 6996
 #define BACKLOG 10
+#define FRAME_SIZE 256
+
+int sendall(char* message,int len,int sockfd){
+    if (len > 255) {
+    fprintf(stderr, "Message too long\n");
+    return -1;
+}
+    char frame[FRAME_SIZE];
+    frame[0]= (unsigned char)len;
+    memcpy(frame+1,message,len);
+    int sent =0;
+    while(sent<len+1){
+        ssize_t bytes_sent = send(sockfd, frame+sent, len+1-sent, 0);
+        if (bytes_sent < 0) {
+            perror("Send failed");
+            break;
+        }
+        sent+=bytes_sent;
+    }
+    return(0);
+}
 
 
 int main(){
@@ -57,17 +78,19 @@ int main(){
     size_t  len =0;
     while(1){
         int read = getline(&message,&len,stdin);
-        message[read-1] ='\0';
-        read--;
         if(read<0){
             printf("failed to parse your message, Try again!\n");
             continue;
         }
-        bytes_sent = send(sockfd, message, read, 0);
-        if (bytes_sent < 0) {
-            perror("Send failed");
-            break;
+        message[read-1] ='\0';
+        read--;
+        sendall(message,read,sockfd);
+        if(strcmp(message,"exit")==0){
+            printf("Good-Bye User!\n");
+            close(sockfd);
+            exit(0);
         }
+        
 
     }
 

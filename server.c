@@ -9,6 +9,7 @@
 
 #define PORT 6996
 #define BACKLOG 10
+#define BUFFER_SIZE 1024
 
 int Accept_Connection(int* fd, int* sockfd, struct sockaddr_in* client_addr){
     socklen_t client_addr_len = sizeof(*client_addr);
@@ -18,18 +19,40 @@ int Accept_Connection(int* fd, int* sockfd, struct sockaddr_in* client_addr){
         close(*sockfd);
         return(-1);
     }
+    return 1;
 }
 
-int Recieve_Message(int *fd, char* buf){
-    ssize_t n = recv(*fd, buf,sizeof(buf)-1,0);
+int Recieve_Message(int *fd,char* workbuf,int* bytes_in_buffer){
+    
+
+    ssize_t n;
+    n = recv(*fd,workbuf + *bytes_in_buffer,BUFFER_SIZE - *bytes_in_buffer,0);
+  
+    size_t frame_len = (unsigned char)workbuf[0]+1;
+    if (n > 0) {
+        *bytes_in_buffer += n;
+        if (frame_len - 1 == 4 &&
+        memcmp(workbuf + 1, "exit", 4) == 0) {
+    
+        printf("User left!\n");
+        close(*fd);
+        exit(0);
+    }
+    }
+    else if (n == 0) {
+        printf("Client closed connection\n");
+        return 0;
+    }
+    else {
+        perror("recv failed!");
+        return -1;
+    }
+
+    while(*bytes_in_buffer<frame_len){
+        n = recv(*fd, workbuf+*bytes_in_buffer,(BUFFER_SIZE-*bytes_in_buffer),0);
     if(n>0){
-        buf[n] = '\0';
-        if(strcmp(buf,"exit")==0){
-            printf("User left!");
-            close(*fd);
-            exit(0);
-        }
-        printf("%s\n",buf);
+        *bytes_in_buffer+=n;
+        
     }
     else if(n==0){
         printf("Client closed connection\n");
@@ -41,9 +64,19 @@ int Recieve_Message(int *fd, char* buf){
         return(-1);
     }
 }
+fwrite(workbuf+1,1,frame_len-1,stdout);
+fflush(stdout);
+size_t remaining = *bytes_in_buffer-frame_len;
+memmove(
+    workbuf,
+    workbuf + frame_len,
+    remaining
+);
 
+*bytes_in_buffer= remaining;
+return(1);
 
-
+}
 
 int main(){
     int sockfd, fd;
@@ -71,6 +104,7 @@ int main(){
         close(sockfd);
         exit(-1);
     }
+    
     //Accept Client Request
     Accept_Connection(&fd,&sockfd,&client_addr);
     
@@ -83,13 +117,18 @@ int main(){
     bytes_sent = send(fd, welcome, len, 0);
     
     //Recieve messages from client
+    int bytes_in_buffer=0;
+    char buf[BUFFER_SIZE];
     while(1){
-        char buf[50];
-        Recieve_Message(&fd,buf);
+        int check = Recieve_Message(&fd,buf,&bytes_in_buffer);
+        if(check<1){
+            break;
+        }
+        printf("\n");
     }
     close(fd);
     close(sockfd);
-   return 0;
+    return 0;
 
 
 
