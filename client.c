@@ -37,10 +37,9 @@ int main(){
         exit(-1);
     }
     unsigned char secret[32];
-    int secret_len;
+    size_t secret_len;
     sleep(1);
     secret_key(&sockfd,secret,&secret_len);
-    printf("%i\n",secret_len);
     
     char buf[50];
     ssize_t n = recv(sockfd, buf,sizeof(buf)-1,0);
@@ -55,7 +54,7 @@ int main(){
         perror("recv failed!");
     }
 
-    char* message = NULL;
+    unsigned char* message = NULL;
     size_t  len =0;
     while(1){
         int read = getline(&message,&len,stdin);

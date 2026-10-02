@@ -27,13 +27,13 @@ int Accept_Connection(int* fd, int* sockfd, struct sockaddr_in* client_addr){
 int main(){
     int sockfd, fd;
     unsigned char secret[32];
-    int secret_len;
+    size_t secret_len;
     struct sockaddr_in my_addr;
     struct sockaddr_in client_addr;
 
     sockfd = socket(AF_INET,SOCK_STREAM,0);
     if(sockfd<0){
-        perror("Socket Creation Failed!"); 
+        perror("Socket Creation Failed."); 
         exit(-1);
     }
     my_addr.sin_family = AF_INET;
@@ -55,7 +55,7 @@ int main(){
     
     //Accept Client Request
     Accept_Connection(&fd,&sockfd,&client_addr);
-    secret_key(&fd,secret_key,&secret_len);
+    secret_key(&fd,secret,&secret_len);
     
     //Welcome Message
     char* user = inet_ntoa(client_addr.sin_addr);
@@ -68,7 +68,7 @@ int main(){
     //Recieve messages from client
     int bytes_in_buffer=0;
     char buf[BUFFER_SIZE];
-    char* message_recv;
+    unsigned char message_recv[BUFFER_SIZE];
     while(1){
         int check = Recieve_Message(&fd,buf,&bytes_in_buffer,message_recv);
         if(check<1){

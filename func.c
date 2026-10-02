@@ -9,7 +9,7 @@
 #include <openssl/evp.h>
 #include "func.h"
 
-int sendall(char* message,int len,int sockfd){
+int sendall(unsigned char* message,int len,int sockfd){
     if (len > 255) {
     fprintf(stderr, "Message too long\n");
     return -1;
@@ -29,7 +29,7 @@ int sendall(char* message,int len,int sockfd){
     return(0);
 }
 
-int Recieve_Message(int *fd,char* workbuf,int* bytes_in_buffer,char*print_buf){
+int Recieve_Message(int *fd,char* workbuf,int* bytes_in_buffer,unsigned char*print_buf){
     
 
     ssize_t n;
@@ -72,6 +72,7 @@ int Recieve_Message(int *fd,char* workbuf,int* bytes_in_buffer,char*print_buf){
     }
 }
 memcpy(print_buf,workbuf+1,frame_len-1);
+print_buf[frame_len - 1] = '\0';
 size_t remaining = *bytes_in_buffer-frame_len;
 memmove(
     workbuf,
@@ -84,13 +85,13 @@ return(1);
 
 }
 
-int secret_key(int *sockfd,char* secret,size_t* secret_key_len){
+int secret_key(int *sockfd,unsigned char* secret,size_t* secret_key_len){
     EVP_PKEY* keypair = EVP_PKEY_Q_keygen(NULL,NULL,"X25519");
     if(keypair==NULL){
         fprintf(stderr,"Failed to create keypair");
         return 1;
     }
-    unsigned char public_key[32];
+    unsigned char public_key[256];
     size_t public_key_len= sizeof(public_key);
 
     if(EVP_PKEY_get_raw_public_key(keypair,public_key,&public_key_len)<=0){
@@ -138,6 +139,13 @@ if (EVP_PKEY_derive(ctx, secret, &secret_len) <= 0) {
 }
 
 *secret_key_len = secret_len;
+printf("Shared secret (%zu bytes): ", secret_len);
+
+for (size_t i = 0; i < secret_len; i++) {
+    printf("%02x", secret[i]);
+}
+
+printf("\n");
 EVP_PKEY_CTX_free(ctx);
 EVP_PKEY_free(peer_key);
 EVP_PKEY_free(keypair);
