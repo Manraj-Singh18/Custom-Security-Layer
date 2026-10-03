@@ -9,21 +9,6 @@
 #include <openssl/evp.h>
 #include "func.h"
 
-
-
-int Accept_Connection(int* fd, int* sockfd, struct sockaddr_in* client_addr){
-    socklen_t client_addr_len = sizeof(*client_addr);
-    *fd = accept(*sockfd, (struct sockaddr*)client_addr, &client_addr_len    );
-    if(*fd<0){
-        perror("Connection not established!");
-        close(*sockfd);
-        return(-1);
-    }
-    return 1;
-}
-
-
-
 int main(){
     int sockfd, fd;
     unsigned char secret[32];
@@ -55,6 +40,7 @@ int main(){
     
     //Accept Client Request
     Accept_Connection(&fd,&sockfd,&client_addr);
+    //Shared Secret
     secret_key(&fd,secret,&secret_len);
     
     //Welcome Message
@@ -76,13 +62,8 @@ int main(){
         }
         printf("%s\n",message_recv);
     }
+
     close(fd);
     close(sockfd);
     return 0;
-
-
-
-
-
-
 }

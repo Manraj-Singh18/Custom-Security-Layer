@@ -38,7 +38,6 @@ int main(){
     }
     unsigned char secret[32];
     size_t secret_len;
-    sleep(1);
     secret_key(&sockfd,secret,&secret_len);
     
     char buf[50];
@@ -70,12 +69,7 @@ int main(){
             close(sockfd);
             exit(0);
         }
-        
-
     }
-
-
-   
     close(sockfd);
    
 
