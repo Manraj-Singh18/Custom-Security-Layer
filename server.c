@@ -42,7 +42,25 @@ int main(){
     Accept_Connection(&fd,&sockfd,&client_addr);
     //Shared Secret
     secret_key(&fd,secret,&secret_len);
-    
+    // Derive encryption and mac key
+    unsigned char encryption_key[32];
+    unsigned char mac_key[32];
+    derive_key(encryption_key,mac_key,secret);
+    printf("Encryption key: ");
+
+for (int i = 0; i < 32; i++) {
+    printf("%02x", encryption_key[i]);
+}
+
+printf("\n");
+
+printf("MAC key: ");
+
+for (int i = 0; i < 32; i++) {
+    printf("%02x", mac_key[i]);
+}
+
+printf("\n");
     //Welcome Message
     char* user = inet_ntoa(client_addr.sin_addr);
     char welcome[50];
@@ -66,4 +84,4 @@ int main(){
     close(fd);
     close(sockfd);
     return 0;
-}
+ }

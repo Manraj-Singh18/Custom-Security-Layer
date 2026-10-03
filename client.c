@@ -38,7 +38,23 @@ int main(){
     }
     unsigned char secret[32];
     size_t secret_len;
+    //Exchange-keys
     secret_key(&sockfd,secret,&secret_len);
+    // Derive encryption and mac key
+    unsigned char encryption_key[32];
+    unsigned char mac_key[32];
+    derive_key(encryption_key,mac_key,secret);
+    printf("Encryption key: ");
+
+for (int i = 0; i < 32; i++) {
+    printf("%02x", encryption_key[i]);
+}
+printf("\n");
+printf("MAC key: ");
+for (int i = 0; i < 32; i++) {
+    printf("%02x", mac_key[i]);
+}
+printf("\n");
     
     char buf[50];
     ssize_t n = recv(sockfd, buf,sizeof(buf)-1,0);
