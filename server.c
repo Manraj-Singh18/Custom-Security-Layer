@@ -39,13 +39,13 @@ int main(){
     }
     
     //Accept Client Request
-    Accept_Connection(&fd,&sockfd,&client_addr);
+    accept_connection(&fd,&sockfd,&client_addr);
     //Shared Secret
     secret_key(&fd,secret,&secret_len);
     // Derive encryption and mac key
     unsigned char encryption_key[32];
     unsigned char mac_key[32];
-    derive_key(encryption_key,mac_key,secret);
+    derive_key(encryption_key,mac_key,secret,CLIENT);
     printf("Encryption key: ");
 
 for (int i = 0; i < 32; i++) {
@@ -74,7 +74,7 @@ printf("\n");
     char buf[BUFFER_SIZE];
     unsigned char message_recv[BUFFER_SIZE];
     while(1){
-        int check = Recieve_Message(&fd,buf,&bytes_in_buffer,message_recv);
+        int check = receive_message(&fd,buf,&bytes_in_buffer,message_recv);
         if(check<1){
             break;
         }

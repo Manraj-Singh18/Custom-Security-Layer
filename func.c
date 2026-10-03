@@ -12,7 +12,7 @@
 #include <openssl/params.h>
 #include "func.h"
 
-int Accept_Connection(int* fd, int* sockfd, struct sockaddr_in* client_addr){
+int accept_connection(int* fd, int* sockfd, struct sockaddr_in* client_addr){
     socklen_t client_addr_len = sizeof(*client_addr);
     *fd = accept(*sockfd, (struct sockaddr*)client_addr, &client_addr_len    );
     if(*fd<0){
@@ -43,7 +43,7 @@ int sendall(unsigned char* message,int len,int sockfd){
     return(0);
 }
 
-int Recieve_Message(int *fd,char* workbuf,int* bytes_in_buffer,unsigned char*print_buf){
+int receive_message(int *fd,char* workbuf,int* bytes_in_buffer,unsigned char*print_buf){
     
     ssize_t n;
     n = recv(*fd,workbuf + *bytes_in_buffer,BUFFER_SIZE - *bytes_in_buffer,0);
@@ -107,7 +107,7 @@ int secret_key(int *sockfd,unsigned char* secret,size_t* secret_key_len){
     unsigned char peer_public_key[32];
     char workbuf[64];
     int bytes_in_buffer=0;
-    Recieve_Message(sockfd,workbuf,&bytes_in_buffer,peer_public_key);
+    receive_message(sockfd,workbuf,&bytes_in_buffer,peer_public_key);
     EVP_PKEY *peer_key =
     EVP_PKEY_new_raw_public_key(
         EVP_PKEY_X25519,
@@ -155,10 +155,24 @@ return 0;
 
 }
 
-int derive_key(unsigned char* encryption_key, unsigned char* mac_key, unsigned char* skey){
+int derive_key(unsigned char* encryption_key, unsigned char* mac_key, unsigned char* skey,enum TLSWriter writer){
     unsigned char prk[32];  
     EVP_KDF* kdf = EVP_KDF_fetch(NULL,"HKDF",NULL);
     EVP_KDF_CTX* extract_ctx = EVP_KDF_CTX_new(kdf);
+    const char* info;
+    const char* mac_info; 
+    //Check who writes
+    switch(writer){
+        case CLIENT:
+            info = "CSL Client-to-Server Encryption-Key";
+            mac_info = "CSL Client-to-Server MAC-Key";
+            break;
+        case SERVER:
+            info = "CSL Server-to-Client Encryption-Key";
+            mac_info = "CSL Server-to-Client MAC-Key";
+            break;
+
+    }
     // extract encryption key
     OSSL_PARAM extract_params[]={
         OSSL_PARAM_construct_utf8_string(
@@ -184,7 +198,7 @@ int derive_key(unsigned char* encryption_key, unsigned char* mac_key, unsigned c
     fprintf(stderr, "HKDF-Extract failed\n");
     return 1;
 }
-    const char* info = "CSL Client-Server Encryption-Key";
+
     EVP_KDF_CTX_free(extract_ctx);
 // expand encryption key
     EVP_KDF_CTX* expand_ctx = EVP_KDF_CTX_new(kdf);
@@ -223,7 +237,7 @@ int derive_key(unsigned char* encryption_key, unsigned char* mac_key, unsigned c
     EVP_KDF_CTX_free(expand_ctx);
 // expand mac key
 EVP_KDF_CTX* mac_ctx = EVP_KDF_CTX_new(kdf);
-const char* mac_info = "CSL Client-Server MAC-Key";
+
     OSSL_PARAM mac_params[]={
         OSSL_PARAM_construct_utf8_string(
         OSSL_KDF_PARAM_DIGEST,
@@ -259,6 +273,7 @@ const char* mac_info = "CSL Client-Server MAC-Key";
 }
 EVP_KDF_CTX_free(mac_ctx);
 EVP_KDF_free(kdf);
+return 0;
 
 
 
