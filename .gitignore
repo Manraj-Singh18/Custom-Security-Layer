@@ -1,0 +1,4 @@
+./Makefile
+./.vscode/
+./server
+./client

@@ -7,6 +7,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <openssl/evp.h>
+#include <openssl/kdf.h>
+#include <openssl/core_names.h>
+#include <openssl/params.h>
 #include "func.h"
 
 int Accept_Connection(int* fd, int* sockfd, struct sockaddr_in* client_addr){
@@ -149,6 +152,116 @@ EVP_PKEY_CTX_free(ctx);
 EVP_PKEY_free(peer_key);
 EVP_PKEY_free(keypair);
 return 0;
+
+}
+
+int derive_key(unsigned char* encryption_key, unsigned char* mac_key, unsigned char* skey){
+    unsigned char prk[32];  
+    EVP_KDF* kdf = EVP_KDF_fetch(NULL,"HKDF",NULL);
+    EVP_KDF_CTX* extract_ctx = EVP_KDF_CTX_new(kdf);
+    // extract encryption key
+    OSSL_PARAM extract_params[]={
+        OSSL_PARAM_construct_utf8_string(
+        OSSL_KDF_PARAM_DIGEST,
+        "SHA256",
+        0
+    ),
+
+    OSSL_PARAM_construct_octet_string(
+    OSSL_KDF_PARAM_KEY,
+    skey,
+    32
+    ),  
+    OSSL_PARAM_construct_utf8_string(
+    OSSL_KDF_PARAM_MODE,
+    "EXTRACT_ONLY",
+    0
+    ),
+
+    OSSL_PARAM_construct_end()
+    };
+    if (EVP_KDF_derive(extract_ctx,prk,sizeof(prk),extract_params) <= 0) {
+    fprintf(stderr, "HKDF-Extract failed\n");
+    return 1;
+}
+    const char* info = "CSL Client-Server Encryption-Key";
+    EVP_KDF_CTX_free(extract_ctx);
+// expand encryption key
+    EVP_KDF_CTX* expand_ctx = EVP_KDF_CTX_new(kdf);
+    OSSL_PARAM expand_params[]={
+        OSSL_PARAM_construct_utf8_string(
+        OSSL_KDF_PARAM_DIGEST,
+        "SHA256",
+        0
+    ),
+
+    OSSL_PARAM_construct_octet_string(
+    OSSL_KDF_PARAM_KEY,
+    prk,
+    sizeof(prk)
+    ),
+    OSSL_PARAM_construct_octet_string(
+        OSSL_KDF_PARAM_INFO,
+        (void *)info,
+        strlen(info)
+    ),
+
+    OSSL_PARAM_construct_utf8_string(
+    OSSL_KDF_PARAM_MODE,
+    "EXPAND_ONLY",
+    0
+    ),
+
+    OSSL_PARAM_construct_end()
+    };
+    if (EVP_KDF_derive(expand_ctx, encryption_key, 32, expand_params) <= 0) {
+    fprintf(stderr, "HKDF-Expand failed\n");
+    EVP_KDF_CTX_free(expand_ctx);
+    EVP_KDF_free(kdf);
+    return 1;
+}
+    EVP_KDF_CTX_free(expand_ctx);
+// expand mac key
+EVP_KDF_CTX* mac_ctx = EVP_KDF_CTX_new(kdf);
+const char* mac_info = "CSL Client-Server MAC-Key";
+    OSSL_PARAM mac_params[]={
+        OSSL_PARAM_construct_utf8_string(
+        OSSL_KDF_PARAM_DIGEST,
+        "SHA256",
+        0
+    ),
+
+    OSSL_PARAM_construct_octet_string(
+    OSSL_KDF_PARAM_KEY,
+    prk,
+    sizeof(prk)
+    ),
+    OSSL_PARAM_construct_octet_string(
+        OSSL_KDF_PARAM_INFO,
+        (void *)mac_info,
+        strlen(mac_info)
+    ),
+
+    OSSL_PARAM_construct_utf8_string(
+    OSSL_KDF_PARAM_MODE,
+    "EXPAND_ONLY",
+    0
+    ),
+
+    OSSL_PARAM_construct_end()
+    };
+    if (EVP_KDF_derive(mac_ctx, mac_key, 32, mac_params) <= 0) {
+    fprintf(stderr, "HKDF-Expand MAC key failed\n");
+
+    EVP_KDF_CTX_free(mac_ctx);
+    EVP_KDF_free(kdf);
+    return 1;
+}
+EVP_KDF_CTX_free(mac_ctx);
+EVP_KDF_free(kdf);
+
+
+
 
 }
 
