@@ -9,7 +9,9 @@
 #include <openssl/evp.h>
 #include <openssl/kdf.h>
 #include <openssl/core_names.h>
+#include <openssl/hmac.h>
 #include <openssl/params.h>
+#include <openssl/crypto.h>
 #include "func.h"
 
 int accept_connection(int* fd, int* sockfd, struct sockaddr_in* client_addr){
@@ -280,3 +282,48 @@ return 0;
 
 }
 
+//To Do: pass actual client and server public key as transcript
+
+int handshake(int* sockfd,unsigned char* encryption_key,unsigned char* mac_key,int role){
+    unsigned char secret[32];
+    size_t secret_len;
+    //Exchange-keys
+    secret_key(sockfd,secret,&secret_len);
+    // Derive encryption and mac key
+    derive_key(encryption_key,mac_key,secret,CLIENT);
+    unsigned char transcript[]= {
+        "CLIENT PUBLIC KEY",
+        "SERVER PUBLIC KEY"    };
+    size_t transcript_len = sizeof(transcript);
+    unsigned char mac[EVP_MAX_MD_SIZE];
+    int mac_len;
+    if (HMAC(EVP_sha256(),mac_key,32,transcript,transcript_len,mac,&mac_len) == NULL) {
+    fprintf(stderr, "HMAC failed\n");
+    return 1;
+}
+unsigned char peer_mac[EVP_MAX_MD_SIZE];
+char workbuf[EVP_MAX_MD_SIZE+32];
+int bytes_in_buffer=0;
+if(role==SERVER){
+    receive_message(sockfd,workbuf,&bytes_in_buffer,peer_mac);
+    sendall((unsigned char*)mac,mac_len,*sockfd);
+
+}
+else{
+
+    sendall((unsigned char*)mac,mac_len,*sockfd);
+    receive_message(sockfd,workbuf,&bytes_in_buffer,peer_mac);
+
+}
+if(CRYPTO_memcmp(mac,peer_mac,32)==0){
+    printf("Handshake successful!\n");
+    return 0;
+}
+else{
+    printf("Handshake unsuccessful!");
+    return 1;
+}
+
+
+    
+}

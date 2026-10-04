@@ -11,7 +11,6 @@
 
 int main(){
     int sockfd, fd;
-    unsigned char secret[32];
     size_t secret_len;
     struct sockaddr_in my_addr;
     struct sockaddr_in client_addr;
@@ -37,37 +36,12 @@ int main(){
         close(sockfd);
         exit(-1);
     }
-    
     //Accept Client Request
     accept_connection(&fd,&sockfd,&client_addr);
-    //Shared Secret
-    secret_key(&fd,secret,&secret_len);
-    // Derive encryption and mac key
-    unsigned char encryption_key[32];
-    unsigned char mac_key[32];
-    derive_key(encryption_key,mac_key,secret,CLIENT);
-    printf("Encryption key: ");
-
-for (int i = 0; i < 32; i++) {
-    printf("%02x", encryption_key[i]);
-}
-
-printf("\n");
-
-printf("MAC key: ");
-
-for (int i = 0; i < 32; i++) {
-    printf("%02x", mac_key[i]);
-}
-
-printf("\n");
-    //Welcome Message
-    char* user = inet_ntoa(client_addr.sin_addr);
-    char welcome[50];
-    sprintf(welcome, "Hello user %s", user);
-    int len;
-    len = strlen(welcome);
-    send(fd, welcome, len, 0);
+    
+    unsigned char client_encryption_key[32];
+    unsigned char client_mac_key[32];
+    handshake(&fd,client_encryption_key,client_mac_key,SERVER);
     
     //Recieve messages from client
     int bytes_in_buffer=0;

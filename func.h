@@ -19,5 +19,6 @@ int sendall(unsigned char *message, int len, int sockfd);
 int receive_message(int *fd, char *workbuf, int *bytes_in_buffer,unsigned char*peer_public_key);
 int secret_key(int* sockfd,unsigned char* secret,size_t* secret_key_len);
 int derive_key(unsigned char* encryption_key, unsigned char* mac_key, unsigned char* skey,enum TLSWriter writer);
+int handshake(int* sockfd,unsigned char* encryption_key,unsigned char* mac_key,int role);
 
 #endif      

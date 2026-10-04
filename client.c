@@ -36,39 +36,10 @@ int main(){
         close(sockfd);
         exit(-1);
     }
-    unsigned char secret[32];
-    size_t secret_len;
-    //Exchange-keys
-    secret_key(&sockfd,secret,&secret_len);
-    // Derive encryption and mac key
-    unsigned char encryption_key[32];
-    unsigned char mac_key[32];
-    derive_key(encryption_key,mac_key,secret,CLIENT);
-    printf("Encryption key: ");
-
-for (int i = 0; i < 32; i++) {
-    printf("%02x", encryption_key[i]);
-}
-printf("\n");
-printf("MAC key: ");
-for (int i = 0; i < 32; i++) {
-    printf("%02x", mac_key[i]);
-}
-printf("\n");
     
-    char buf[50];
-    ssize_t n = recv(sockfd, buf,sizeof(buf)-1,0);
-    if(n>0){
-        buf[n] = '\0';
-        printf("%s\n",buf);
-    }
-    else if(n==0){
-        printf("Server closed connection\n");
-    }
-    else{
-        perror("recv failed!");
-    }
-
+    unsigned char client_encryption_key[32];
+    unsigned char client_mac_key[32];
+    handshake(&sockfd,client_encryption_key,client_encryption_key,CLIENT);
     unsigned char* message = NULL;
     size_t  len =0;
     while(1){
