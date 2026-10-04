@@ -14,6 +14,8 @@
 #include <openssl/crypto.h>
 #include "func.h"
 
+// #define TEST_TAMPER 1
+
 int accept_connection(int* fd, int* sockfd, struct sockaddr_in* client_addr){
     socklen_t client_addr_len = sizeof(*client_addr);
     *fd = accept(*sockfd, (struct sockaddr*)client_addr, &client_addr_len    );
@@ -94,22 +96,25 @@ memmove(
 return(1);
 }
 
-int secret_key(int *sockfd,unsigned char* secret,size_t* secret_key_len){
+int secret_key(int *sockfd,unsigned char* secret,size_t* secret_key_len,unsigned char* public_key,unsigned char* peer_public_key){
     EVP_PKEY* keypair = EVP_PKEY_Q_keygen(NULL,NULL,"X25519");
     if(keypair==NULL){
         fprintf(stderr,"Failed to create keypair");
         return 1;
     }
-    unsigned char public_key[256];
-    size_t public_key_len= sizeof(public_key);
+    size_t public_key_len= 32;
     if(EVP_PKEY_get_raw_public_key(keypair,public_key,&public_key_len)<=0){
         fprintf(stderr,"Failed to extract public key");
     }
     sendall(public_key,public_key_len,*sockfd);
-    unsigned char peer_public_key[32];
-    char workbuf[64];
+    char workbuf[BUFFER_SIZE];
     int bytes_in_buffer=0;
     receive_message(sockfd,workbuf,&bytes_in_buffer,peer_public_key);
+    #ifdef TEST_TAMPER
+    printf("TEST: Tampering with peer public key\n");
+    peer_public_key[0] ^= 0x01;
+    #endif
+
     EVP_PKEY *peer_key =
     EVP_PKEY_new_raw_public_key(
         EVP_PKEY_X25519,
@@ -144,12 +149,6 @@ if (EVP_PKEY_derive(ctx, secret, &secret_len) <= 0) {
     return 1;
 }
 *secret_key_len = secret_len;
-printf("Shared secret (%zu bytes): ", secret_len);
-for (size_t i = 0; i < secret_len; i++) {
-    printf("%02x", secret[i]);
-}
-
-printf("\n");
 EVP_PKEY_CTX_free(ctx);
 EVP_PKEY_free(peer_key);
 EVP_PKEY_free(keypair);
@@ -288,21 +287,32 @@ int handshake(int* sockfd,unsigned char* encryption_key,unsigned char* mac_key,i
     unsigned char secret[32];
     size_t secret_len;
     //Exchange-keys
-    secret_key(sockfd,secret,&secret_len);
+    unsigned char public_key[33]; // One extra byte for \0 at the end;
+    unsigned char peer_public_key[33]; // One extra byte for \0 at the end;
+
+    secret_key(sockfd,secret,&secret_len,public_key,peer_public_key);
     // Derive encryption and mac key
     derive_key(encryption_key,mac_key,secret,CLIENT);
-    unsigned char transcript[]= {
-        "CLIENT PUBLIC KEY",
-        "SERVER PUBLIC KEY"    };
-    size_t transcript_len = sizeof(transcript);
+    unsigned char transcript[64];
+    switch(role){
+        case CLIENT:
+            memcpy(transcript,public_key,32);
+            memcpy(transcript+32,peer_public_key,32);
+            break;
+        case SERVER:
+            memcpy(transcript,peer_public_key,32);
+            memcpy(transcript+32, public_key,32);   
+            break;
+    }
+    size_t transcript_len = 64;
     unsigned char mac[EVP_MAX_MD_SIZE];
-    int mac_len;
+    unsigned int mac_len;
     if (HMAC(EVP_sha256(),mac_key,32,transcript,transcript_len,mac,&mac_len) == NULL) {
     fprintf(stderr, "HMAC failed\n");
     return 1;
 }
 unsigned char peer_mac[EVP_MAX_MD_SIZE];
-char workbuf[EVP_MAX_MD_SIZE+32];
+char workbuf[BUFFER_SIZE];
 int bytes_in_buffer=0;
 if(role==SERVER){
     receive_message(sockfd,workbuf,&bytes_in_buffer,peer_mac);
@@ -320,7 +330,7 @@ if(CRYPTO_memcmp(mac,peer_mac,32)==0){
     return 0;
 }
 else{
-    printf("Handshake unsuccessful!");
+    printf("Handshake unsuccessful!\n");
     return 1;
 }
 

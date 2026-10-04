@@ -39,7 +39,7 @@ int main(){
     
     unsigned char client_encryption_key[32];
     unsigned char client_mac_key[32];
-    handshake(&sockfd,client_encryption_key,client_encryption_key,CLIENT);
+    handshake(&sockfd,client_encryption_key,client_mac_key,CLIENT);
     unsigned char* message = NULL;
     size_t  len =0;
     while(1){

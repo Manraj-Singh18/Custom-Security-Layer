@@ -11,7 +11,6 @@
 
 int main(){
     int sockfd, fd;
-    size_t secret_len;
     struct sockaddr_in my_addr;
     struct sockaddr_in client_addr;
 
