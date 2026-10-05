@@ -20,7 +20,6 @@ int handshake(
     Certificate *certificate,
     EVP_PKEY *ca_public
 );  
-EVP_PKEY *generate_identity_key(void);
 EVP_PKEY *load_private_key(const char *filename);
 EVP_PKEY *load_public_key(const char *filename);
 int load_certificate(const char *filename, Certificate *certificate);
