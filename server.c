@@ -7,8 +7,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <openssl/evp.h>
-#include "func.h"
-
+#include "com.h"
+#include "encrypt.h"
+#include "key.h"
 int main(){
     int sockfd, fd;
     struct sockaddr_in my_addr;

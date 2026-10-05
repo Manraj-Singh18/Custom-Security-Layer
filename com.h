@@ -10,9 +10,6 @@
 #define FRAME_SIZE 256
 #define BUFFER_SIZE 1024
 
-#define KEY_LEN   32
-#define NONCE_LEN 12
-#define TAG_LEN   16
 enum TLSWriter{
     CLIENT,
     SERVER

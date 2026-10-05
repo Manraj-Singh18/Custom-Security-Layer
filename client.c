@@ -8,7 +8,9 @@
 #include <unistd.h>
 #include <openssl/evp.h>
 #include <unistd.h> 
-#include "func.h"
+#include "com.h"
+#include "encrypt.h"
+#include "key.h"
 
 int main(){
     int sockfd;
