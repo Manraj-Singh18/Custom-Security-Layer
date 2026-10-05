@@ -12,11 +12,10 @@ TARGETS = client server
 
 all: $(TARGETS)
 
-client: client.c func.c func.h
-	$(CC) $(CFLAGS) $(LDFLAGS) client.c func.c $(LDLIBS) -o client
+client: client.c com.c com.h key.c key.h encrypt.c encrypt.h
+	$(CC) $(CFLAGS) $(LDFLAGS) client.c com.c key.c encrypt.c $(LDLIBS) -o client
 
-server: server.c func.c func.h
-	$(CC) $(CFLAGS) $(LDFLAGS) server.c func.c $(LDLIBS) -o server
-
+server: server.c com.c com.h key.c key.h encrypt.c encrypt.h 
+	$(CC) $(CFLAGS) $(LDFLAGS) server.c com.c key.c encrypt.c $(LDLIBS) -o server
 clean:
 	rm -f client server *.o

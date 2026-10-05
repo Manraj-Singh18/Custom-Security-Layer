@@ -7,12 +7,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <openssl/evp.h>
-#include "func.h"
-
+#include "com.h"
+#include "encrypt.h"
+#include "key.h"
 int main(){
     int sockfd, fd;
-    unsigned char secret[32];
-    size_t secret_len;
     struct sockaddr_in my_addr;
     struct sockaddr_in client_addr;
 
@@ -37,49 +36,55 @@ int main(){
         close(sockfd);
         exit(-1);
     }
-    
     //Accept Client Request
     accept_connection(&fd,&sockfd,&client_addr);
-    //Shared Secret
-    secret_key(&fd,secret,&secret_len);
-    // Derive encryption and mac key
-    unsigned char encryption_key[32];
-    unsigned char mac_key[32];
-    derive_key(encryption_key,mac_key,secret,CLIENT);
-    printf("Encryption key: ");
-
-for (int i = 0; i < 32; i++) {
-    printf("%02x", encryption_key[i]);
-}
-
-printf("\n");
-
-printf("MAC key: ");
-
-for (int i = 0; i < 32; i++) {
-    printf("%02x", mac_key[i]);
-}
-
-printf("\n");
-    //Welcome Message
-    char* user = inet_ntoa(client_addr.sin_addr);
-    char welcome[50];
-    sprintf(welcome, "Hello user %s", user);
-    int len;
-    len = strlen(welcome);
-    send(fd, welcome, len, 0);
+    
+    unsigned char client_encryption_key[32];
+    unsigned char client_mac_key[32];
+    unsigned char client_send_public_key[32];
+    handshake(&fd,client_encryption_key,client_mac_key,client_send_public_key,SERVER);
     
     //Recieve messages from client
-    int bytes_in_buffer=0;
+    int bytes_in_buffer = 0;
     char buf[BUFFER_SIZE];
     unsigned char message_recv[BUFFER_SIZE];
-    while(1){
-        int check = receive_message(&fd,buf,&bytes_in_buffer,message_recv);
-        if(check<1){
-            break;
+    int message_len = 0;
+    uint64_t expected_seq = 0;                 
+
+    while (1) {
+        int check = receive_message(&fd, buf, &bytes_in_buffer, message_recv, &message_len);
+        if (check < 1) break;
+
+        if (message_len < 8 + 16) {          
+        fprintf(stderr, "Record too short\n");
+        break;
         }
-        printf("%s\n",message_recv);
+
+        int ct_len = message_len - 8 - 16;
+        uint64_t recv_seq;
+            memcpy(&recv_seq, message_recv, 8);
+        if (recv_seq != expected_seq) {
+        fprintf(stderr, "Bad sequence number\n");
+        break;
     }
+
+    unsigned char plaintext[BUFFER_SIZE];
+    int pt_len = decrypt_message(message_recv + 8, ct_len,
+                                 client_encryption_key,
+                                 client_send_public_key,
+                                 expected_seq,
+                                 message_recv + 8 + ct_len,   // tag
+                                 plaintext);
+    if (pt_len < 0) break;               
+
+    plaintext[pt_len] = '\0';
+    if(strcmp(plaintext,"exit")==0){
+        printf("User left!");
+        break;
+    }
+    printf("%s\n", plaintext);
+    expected_seq++;
+}
 
     close(fd);
     close(sockfd);
