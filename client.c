@@ -14,6 +14,7 @@ int main(){
     int sockfd;
     struct sockaddr_in dest_addr;
     const char* cp = DEST_IP;
+    uint64_t send_seq=0;
     
 
     sockfd = socket(AF_INET,SOCK_STREAM,0);
@@ -39,7 +40,8 @@ int main(){
     
     unsigned char client_encryption_key[32];
     unsigned char client_mac_key[32];
-    handshake(&sockfd,client_encryption_key,client_mac_key,CLIENT);
+    unsigned char client_send_public_key[32];
+    handshake(&sockfd,client_encryption_key,client_mac_key,client_send_public_key,CLIENT);
     unsigned char* message = NULL;
     size_t  len =0;
     while(1){
@@ -50,7 +52,22 @@ int main(){
         }
         message[read-1] ='\0';
         read--;
-        sendall(message,read,sockfd);
+        unsigned char ciphertext[read];
+        unsigned char record[1024];
+        const unsigned char tag[16];
+        int ciphertext_len=encrypt_message(message,read,
+            client_send_public_key,
+            client_encryption_key,
+            send_seq,
+            ciphertext,
+            tag);
+        //pack the seq,tag,ciphertext
+        memcpy(record, &send_seq, 8);
+    memcpy(record + 8, ciphertext, ciphertext_len);
+    memcpy(record + 8 + ciphertext_len, tag, 16);
+    int record_len = ciphertext_len+8+16;   
+        sendall(record,record_len,sockfd);
+        send_seq++;
         if(strcmp(message,"exit")==0){
             printf("Good-Bye User!\n");
             close(sockfd);

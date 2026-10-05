@@ -9,7 +9,7 @@
 #include <openssl/evp.h>
 #include <openssl/kdf.h>
 #include <openssl/core_names.h>
-#include <openssl/hmac.h>
+#include <openssl/hmac.h>   
 #include <openssl/params.h>
 #include <openssl/crypto.h>
 #include "func.h"
@@ -47,11 +47,12 @@ int sendall(unsigned char* message,int len,int sockfd){
     return(0);
 }
 
-int receive_message(int *fd,char* workbuf,int* bytes_in_buffer,unsigned char*print_buf){
+int receive_message(int *fd,char* workbuf,int* bytes_in_buffer,unsigned char*print_buf,int* message_len){
     
     ssize_t n;
     n = recv(*fd,workbuf + *bytes_in_buffer,BUFFER_SIZE - *bytes_in_buffer,0);
     int frame_len = (unsigned char)workbuf[0]+1;
+    *message_len = frame_len-1;
     if (n > 0) {
         *bytes_in_buffer += n;
         if (frame_len - 1 == 4 &&
@@ -83,7 +84,6 @@ int receive_message(int *fd,char* workbuf,int* bytes_in_buffer,unsigned char*pri
         return(-1);
     }
 }
-
 memcpy(print_buf,workbuf+1,frame_len-1);
 print_buf[frame_len - 1] = '\0';
 size_t remaining = *bytes_in_buffer-frame_len;
@@ -109,7 +109,8 @@ int secret_key(int *sockfd,unsigned char* secret,size_t* secret_key_len,unsigned
     sendall(public_key,public_key_len,*sockfd);
     char workbuf[BUFFER_SIZE];
     int bytes_in_buffer=0;
-    receive_message(sockfd,workbuf,&bytes_in_buffer,peer_public_key);
+    int size =0;
+    receive_message(sockfd,workbuf,&bytes_in_buffer,peer_public_key,&size);
     #ifdef TEST_TAMPER
     printf("TEST: Tampering with peer public key\n");
     peer_public_key[0] ^= 0x01;
@@ -281,9 +282,9 @@ return 0;
 
 }
 
-//To Do: pass actual client and server public key as transcript
 
-int handshake(int* sockfd,unsigned char* encryption_key,unsigned char* mac_key,int role){
+
+int handshake(int* sockfd,unsigned char* encryption_key,unsigned char* mac_key,unsigned char* write_public_key,int role){
     unsigned char secret[32];
     size_t secret_len;
     //Exchange-keys
@@ -298,10 +299,12 @@ int handshake(int* sockfd,unsigned char* encryption_key,unsigned char* mac_key,i
         case CLIENT:
             memcpy(transcript,public_key,32);
             memcpy(transcript+32,peer_public_key,32);
+            memcpy(write_public_key, public_key, 32);
             break;
         case SERVER:
             memcpy(transcript,peer_public_key,32);
-            memcpy(transcript+32, public_key,32);   
+            memcpy(transcript+32, public_key,32);
+            memcpy(write_public_key, peer_public_key, 32);   
             break;
     }
     size_t transcript_len = 64;
@@ -314,15 +317,16 @@ int handshake(int* sockfd,unsigned char* encryption_key,unsigned char* mac_key,i
 unsigned char peer_mac[EVP_MAX_MD_SIZE];
 char workbuf[BUFFER_SIZE];
 int bytes_in_buffer=0;
+int size = 0;
 if(role==SERVER){
-    receive_message(sockfd,workbuf,&bytes_in_buffer,peer_mac);
+    receive_message(sockfd,workbuf,&bytes_in_buffer,peer_mac,&size);
     sendall((unsigned char*)mac,mac_len,*sockfd);
 
 }
 else{
 
     sendall((unsigned char*)mac,mac_len,*sockfd);
-    receive_message(sockfd,workbuf,&bytes_in_buffer,peer_mac);
+    receive_message(sockfd,workbuf,&bytes_in_buffer,peer_mac,&size);
 
 }
 if(CRYPTO_memcmp(mac,peer_mac,32)==0){
@@ -333,7 +337,256 @@ else{
     printf("Handshake unsuccessful!\n");
     return 1;
 }
-
-
-    
 }
+
+void make_nonce(unsigned char *nonce,const unsigned char *iv,uint64_t seq)
+{
+    memcpy(nonce, iv, 12);
+
+    for (int i = 0; i < 8; i++) {
+        nonce[11 - i] ^= (seq >> (8 * i)) & 0xff;
+    }
+}
+
+int encrypt_message(const unsigned char *plaintext,
+    int plaintext_len,
+    unsigned char* public_write_key,
+    const unsigned char *write_key,
+    uint64_t seq,
+    unsigned char *ciphertext,
+    unsigned char *tag){
+        EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+        int len;
+        int ciphertext_len;
+        if (ctx == NULL) {
+        fprintf(stderr, "Failed to create cipher context\n");
+        return -1;
+
+    }
+    unsigned char* nonce[12];
+    unsigned char aad[8];
+    memcpy(aad, &seq, 8);
+    int aad_len = 8;
+    make_nonce(nonce,public_write_key,seq);
+    if (EVP_EncryptInit_ex(
+            ctx,
+            EVP_aes_256_gcm(),
+            NULL,
+            NULL,
+            NULL) != 1) {
+
+        fprintf(stderr, "EVP_EncryptInit_ex failed\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    if (EVP_EncryptInit_ex(
+            ctx,
+            NULL,
+            NULL,
+            NULL,
+            nonce) != 1) {
+    
+        fprintf(stderr, "Failed to set nonce\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+if (EVP_EncryptInit_ex(
+            ctx,
+            NULL,
+            NULL,
+            write_key,
+            NULL) != 1) {
+        fprintf(stderr, "Failed to set key\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+if (aad != NULL && aad_len > 0) {
+
+        if (EVP_EncryptUpdate(
+                ctx,
+                NULL,
+                &len,
+                aad,
+                aad_len) != 1) {
+
+            fprintf(stderr, "Failed to process AAD\n");
+            EVP_CIPHER_CTX_free(ctx);
+            return -1;
+        }
+    }
+  if (EVP_EncryptUpdate(
+            ctx,
+            ciphertext,
+            &len,
+            plaintext,
+            plaintext_len) != 1) {
+
+        fprintf(stderr, "Encryption failed\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+ciphertext_len = len;
+if (EVP_EncryptFinal_ex(
+            ctx,
+            ciphertext + ciphertext_len,
+            &len) != 1) {
+
+        fprintf(stderr, "Encryption finalization failed\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+    ciphertext_len += len;
+
+    if (EVP_CIPHER_CTX_ctrl(
+            ctx,
+            EVP_CTRL_GCM_GET_TAG,
+            TAG_LEN,
+            tag) != 1) {
+
+        fprintf(stderr, "Failed to get GCM tag\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    return ciphertext_len;
+
+
+}
+
+int decrypt_message(
+    const unsigned char *ciphertext,
+    int ciphertext_len,
+
+    const unsigned char *write_key,
+    unsigned char *public_write_key,
+
+    uint64_t seq,
+
+    const unsigned char *tag,
+
+    unsigned char *plaintext
+)
+{
+    EVP_CIPHER_CTX *ctx;
+    int len;
+    int plaintext_len;
+
+
+    ctx = EVP_CIPHER_CTX_new();
+
+    if (ctx == NULL) {
+        fprintf(stderr, "Failed to create cipher context\n");
+        return -1;
+    }
+    unsigned char* nonce[12];
+    unsigned char aad[8];
+    memcpy(aad, &seq, 8);
+    int aad_len = 8;
+    make_nonce(nonce,public_write_key,seq);
+
+    if (EVP_DecryptInit_ex(
+            ctx,
+            EVP_aes_256_gcm(),
+            NULL,
+            NULL,
+            NULL) != 1) {
+
+        fprintf(stderr, "EVP_DecryptInit_ex failed\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+
+    if (EVP_DecryptInit_ex(
+            ctx,
+            NULL,
+            NULL,
+            NULL,
+            nonce) != 1) {
+
+        fprintf(stderr, "Failed to set nonce\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+
+    if (EVP_DecryptInit_ex(
+            ctx,
+            NULL,
+            NULL,
+            write_key,
+            NULL) != 1) {
+
+        fprintf(stderr, "Failed to set key\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+
+    if (aad != NULL && aad_len > 0) {
+
+        if (EVP_DecryptUpdate(
+                ctx,
+                NULL,
+                &len,
+                aad,
+                aad_len) != 1) {
+
+            fprintf(stderr, "Failed to process AAD\n");
+            EVP_CIPHER_CTX_free(ctx);
+            return -1;
+        }
+    }
+
+
+    if (EVP_DecryptUpdate(
+            ctx,
+            plaintext,
+            &len,
+            ciphertext,
+            ciphertext_len) != 1) {
+
+        fprintf(stderr, "Decryption failed\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+    plaintext_len = len;
+
+
+    if (EVP_CIPHER_CTX_ctrl(
+            ctx,
+            EVP_CTRL_GCM_SET_TAG,
+            TAG_LEN,
+            (void *)tag) != 1) {
+
+        fprintf(stderr, "Failed to set GCM tag\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+
+    if (EVP_DecryptFinal_ex(
+            ctx,
+            plaintext + plaintext_len,
+            &len) <= 0) {
+
+        fprintf(stderr, "Authentication FAILED\n");
+
+        EVP_CIPHER_CTX_free(ctx);
+
+        return -1;
+    }
+
+
+    plaintext_len += len;
+
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    return plaintext_len;
+}
+
