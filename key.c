@@ -136,6 +136,10 @@ int secret_key(
         peer_message,
         &size
     );
+    #ifdef TEST_TAMPER
+    printf("TEST: Tampering with peer public key\n");
+    peer_public_key[0] ^= 0x01;
+    #endif
 
     if(size != 224){
         fprintf(
