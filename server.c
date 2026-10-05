@@ -42,7 +42,37 @@ int main(){
     unsigned char client_encryption_key[32];
     unsigned char client_mac_key[32];
     unsigned char client_send_public_key[32];
-    handshake(&fd,client_encryption_key,client_mac_key,client_send_public_key,SERVER);
+    EVP_PKEY *identity_private =
+    load_private_key("keys/server_private.pem");
+
+    EVP_PKEY *ca_public =
+    load_public_key("keys/ca_public.pem");
+
+    Certificate certificate;
+
+    if (identity_private == NULL ||
+        ca_public == NULL ||
+        load_certificate("certs/server.cert", &certificate) != 0) {
+
+        fprintf(stderr, "Failed to load server identity\n");
+        return 1;
+    }
+    if (handshake(
+        &fd,
+        client_encryption_key,
+        client_mac_key,
+        client_send_public_key,
+        SERVER,
+        identity_private,
+        &certificate,
+        ca_public
+    ) != 0) {
+
+    fprintf(stderr, "Handshake failed\n");
+    return 1;
+}
+EVP_PKEY_free(identity_private);
+EVP_PKEY_free(ca_public);
     
     //Recieve messages from client
     int bytes_in_buffer = 0;
