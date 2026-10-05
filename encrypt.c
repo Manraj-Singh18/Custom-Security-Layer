@@ -394,3 +394,191 @@ int decrypt_message(
     return plaintext_len;
 }
 
+int sign_data(
+    EVP_PKEY *private_key,
+    const unsigned char *data,
+    size_t data_len,
+    unsigned char *signature,
+    size_t *signature_len
+)
+{
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+
+    if (ctx == NULL) {
+        fprintf(stderr, "Failed to create signing context\n");
+        return 1;
+    }
+
+    if (EVP_DigestSignInit(ctx, NULL, NULL, NULL, private_key) <= 0) {
+        fprintf(stderr, "DigestSignInit failed\n");
+        EVP_MD_CTX_free(ctx);
+        return 1;
+    }
+
+    /* Determine required signature length */
+    if (EVP_DigestSign(
+            ctx,
+            NULL,
+            signature_len,
+            data,
+            data_len
+        ) <= 0) {
+
+        fprintf(stderr, "Failed to determine signature length\n");
+        EVP_MD_CTX_free(ctx);
+        return 1;
+    }
+
+    if (EVP_DigestSign(
+            ctx,
+            signature,
+            signature_len,
+            data,
+            data_len
+        ) <= 0) {
+
+        fprintf(stderr, "Signing failed\n");
+        EVP_MD_CTX_free(ctx);
+        return 1;
+    }
+
+    EVP_MD_CTX_free(ctx);
+    return 0;
+}
+
+int verify_signature(
+    EVP_PKEY *public_key,
+    const unsigned char *data,
+    size_t data_len,
+    const unsigned char *signature,
+    size_t signature_len
+)
+{
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+
+    if (ctx == NULL) {
+        fprintf(stderr, "Failed to create verification context\n");
+        return 1;
+    }
+
+    if (EVP_DigestVerifyInit(ctx, NULL, NULL, NULL, public_key) <= 0) {
+        fprintf(stderr, "DigestVerifyInit failed\n");
+        EVP_MD_CTX_free(ctx);
+        return 1;
+    }
+
+    int result = EVP_DigestVerify(
+        ctx,
+        signature,
+        signature_len,
+        data,
+        data_len
+    );
+
+    EVP_MD_CTX_free(ctx);
+
+    if (result == 1) {
+        return 0;
+    }
+
+    return 1;
+}
+
+int create_certificate(
+    Certificate *certificate,
+    EVP_PKEY *ca_private_key
+)
+{
+    unsigned char cert_data[
+        USERNAME_SIZE + ED25519_PUBLIC_KEY_SIZE
+    ];
+
+    /*
+     * Certificate data that the CA will sign:
+     *
+     *     username || identity_public_key
+     *
+     * The CA signature covers both pieces of information.
+     */
+
+    memcpy(
+        cert_data,
+        certificate->username,
+        USERNAME_SIZE
+    );
+
+    memcpy(
+        cert_data + USERNAME_SIZE,
+        certificate->identity_public_key,
+        ED25519_PUBLIC_KEY_SIZE
+    );
+
+    size_t signature_len = ED25519_SIGNATURE_SIZE;
+
+    if (sign_data(
+            ca_private_key,
+            cert_data,
+            sizeof(cert_data),
+            certificate->ca_signature,
+            &signature_len
+        ) != 0) {
+
+        fprintf(stderr, "Failed to sign certificate\n");
+        return 1;
+    }
+    if (signature_len != ED25519_SIGNATURE_SIZE) {
+        fprintf(stderr, "Unexpected certificate signature size\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+int verify_certificate(
+    const Certificate *certificate,
+    EVP_PKEY *ca_public_key
+)
+{
+    unsigned char cert_data[
+        USERNAME_SIZE + ED25519_PUBLIC_KEY_SIZE
+    ];
+
+    /*
+     * Reconstruct exactly what the CA signed:
+     *
+     *     username || identity_public_key
+     */
+
+    memcpy(
+        cert_data,
+        certificate->username,
+        USERNAME_SIZE
+    );
+
+    memcpy(
+        cert_data + USERNAME_SIZE,
+        certificate->identity_public_key,
+        ED25519_PUBLIC_KEY_SIZE
+    );
+
+    /*
+     * Verify the CA's signature.
+     *
+     * sign_data() signed cert_data using the CA private key.
+     * We now verify it using the CA public key.
+     */
+
+    if (verify_signature(
+            ca_public_key,
+            cert_data,
+            sizeof(cert_data),
+            certificate->ca_signature,
+            ED25519_SIGNATURE_SIZE
+        ) != 0) {
+
+        fprintf(stderr, "Certificate verification failed\n");
+        return 1;
+    }
+
+    return 0;
+}

@@ -1,4 +1,7 @@
 ./Makefile
-./.vscode/
-./server
-./client
+/.vscode/
+/server
+/client
+/make_cert
+/keys
+/certs
